@@ -14,9 +14,14 @@ let caller = [];
 
 // Single Method for peer connection
 const PeerConnection = (function(){
-    let peerConnection;
+    let peerConnection = null;
 
     const createPeerConnection = () => {
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+
         const config = {
             iceServers: [
                 {
@@ -61,7 +66,6 @@ const PeerConnection = (function(){
             console.log('ICE connection state:', peerConnection.iceConnectionState);
             if (peerConnection.iceConnectionState === 'failed') {
                 console.error('ICE connection failed');
-                alert('Connection failed. Please try the call again.');
                 endCall();
             }
         };
@@ -75,6 +79,12 @@ const PeerConnection = (function(){
                 peerConnection = createPeerConnection();
             }
             return peerConnection;
+        },
+        reset: () => {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
         }
     }
 })();
@@ -181,9 +191,19 @@ async function startCall(user) {
 
 const endCall = () => {
     const pc = PeerConnection.getInstance();
-    if(pc) {
-        pc.close();
+    if (pc) {
+        // Stop all remote tracks
+        if (remoteVideo.srcObject) {
+            remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+            remoteVideo.srcObject = null;
+        }
+        
+        // Reset the peer connection
+        PeerConnection.reset();
+        
+        // Hide end call button and reset caller
         endCallBtn.style.display = 'none';
+        caller = [];
     }
 }
 
