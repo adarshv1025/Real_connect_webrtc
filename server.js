@@ -79,9 +79,24 @@ io.on("connection", (socket) => {
     });
 });
 
+// Get network IP address
+const getNetworkIP = () => {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return 'localhost';
+};
+
 // Start the server with HTTPS
-server.listen(9000, '0.0.0.0', () => {
+const port = 9000;
+server.listen(port, '0.0.0.0', () => {
+    const networkIP = getNetworkIP();
     console.log('🚀 Server running on:');
-    console.log('➡️  Local:  https://localhost:9000');
-    console.log('➡️  Network: https://10.1.1.6:9000');
+    console.log(`➡️  Local:  https://localhost:${port}`);
+    console.log(`➡️  Network: https://${networkIP}:${port}`);
 });

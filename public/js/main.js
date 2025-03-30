@@ -20,26 +20,51 @@ const PeerConnection = (function(){
         const config = {
             iceServers: [
                 {
-                    urls: 'stun:stun.l.google.com:19302'
+                    urls: [
+                        'stun:stun.l.google.com:19302',
+                        'stun:stun1.l.google.com:19302',
+                        'stun:stun2.l.google.com:19302',
+                        'stun:stun3.l.google.com:19302',
+                        'stun:stun4.l.google.com:19302'
+                    ]
                 }
-            ]
+            ],
+            iceCandidatePoolSize: 10
         };
         peerConnection = new RTCPeerConnection(config);
 
         // add local stream to peer connection
-        localStream.getTracks().forEach(track => {
-            peerConnection.addTrack(track, localStream);
-        })
+        try {
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+        } catch (error) {
+            console.error('Error adding local stream:', error);
+            alert('Failed to setup local stream. Please refresh and try again.');
+            return null;
+        }
+
         // listen to remote stream and add to peer connection
         peerConnection.ontrack = function(event) {
             remoteVideo.srcObject = event.streams[0];
         }
+
         // listen for ice candidate
         peerConnection.onicecandidate = function(event) {
             if(event.candidate) {
                 socket.emit("icecandidate", event.candidate);
             }
         }
+
+        // ICE connection state monitoring
+        peerConnection.oniceconnectionstatechange = function() {
+            console.log('ICE connection state:', peerConnection.iceConnectionState);
+            if (peerConnection.iceConnectionState === 'failed') {
+                console.error('ICE connection failed');
+                alert('Connection failed. Please try the call again.');
+                endCall();
+            }
+        };
 
         return peerConnection;
     }
@@ -137,13 +162,21 @@ socket.on('connect_error', (error) => {
 });
 
 // start call method
-const startCall = async (user) => {
-    console.log({ user })
-    const pc = PeerConnection.getInstance();
-    const offer = await pc.createOffer();
-    console.log({ offer })
-    await pc.setLocalDescription(offer);
-    socket.emit("offer", {from: username.value, to: user, offer: pc.localDescription});
+async function startCall(user) {
+    try {
+        const peerConnection = PeerConnection.getInstance();
+        if (!peerConnection) return;
+
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit("offer", { from: username.value, to: user, offer });
+        caller = [username.value, user];
+        endCallBtn.classList.remove("d-none");
+    } catch (error) {
+        console.error('Error starting call:', error);
+        alert('Failed to start call. Please try again.');
+        endCall();
+    }
 }
 
 const endCall = () => {
@@ -155,63 +188,20 @@ const endCall = () => {
 }
 
 // initialize app
-const startMyVideo = async () => {
-    // Check for secure context
-    if (!window.isSecureContext) {
-        console.error('Insecure context: Camera access may be blocked');
-        alert('Camera access requires a secure connection (HTTPS). Please use HTTPS or localhost.');
-        return;
-    }
-
-    // Check for media devices support
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('Media devices not supported');
-        alert('Your browser does not support camera access.');
-        return;
-    }
-
+async function startMyVideo() {
     try {
-        const constraints = { 
-            audio: true, 
+        localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
             video: {
                 width: { ideal: 1280 },
-                height: { ideal: 720 },
-                facingMode: 'user' // Prefer front camera
+                height: { ideal: 720 }
             }
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        
-        // Additional checks
-        if (!stream.getVideoTracks().length) {
-            throw new Error('No video tracks available');
-        }
-
-        localStream = stream;
-        localVideo.srcObject = stream;
-        localVideo.onloadedmetadata = () => {
-            localVideo.play();
-        };
-
-        console.log('Video stream successfully accessed');
-    } catch(error) {
+        });
+        localVideo.srcObject = localStream;
+    } catch (error) {
         console.error('Error accessing media devices:', error);
-        
-        // Detailed error handling
-        switch(error.name) {
-            case 'NotAllowedError':
-                alert('Camera access was denied. Please check your browser permissions.');
-                break;
-            case 'NotFoundError':
-                alert('No camera found. Please connect a camera and try again.');
-                break;
-            case 'OverconstrainedError':
-                alert('Cannot find a camera that meets the specified constraints.');
-                break;
-            default:
-                alert(`Camera access failed: ${error.message}. Please check your device and permissions.`);
-        }
+        alert('Failed to access camera/microphone. Please ensure you have given permission and the devices are working properly.');
     }
-};
+}
 
 startMyVideo();
